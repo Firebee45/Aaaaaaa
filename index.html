@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Minecraft Portal & Area Map</title>
+  <title>Minecraft Portal & Area Map Editor</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <style>
     body {
@@ -52,7 +52,7 @@
 </head>
 <body>
 
-<h2>Minecraft Portal & Area Map</h2>
+<h2>Minecraft Portal & Area Map Editor</h2>
 
 <form id="coordForm">
   <label>X:</label><input type="number" id="x" required />
@@ -73,16 +73,24 @@
 <div class="button-group">
   <button onclick="clearAll()">Clear All</button>
   <button onclick="downloadPNG()">Download PNG</button>
-  <button id="exportJSONBtn">Export JSON</button>
+  <button id="updateJsonBtn">Update JSON in Repo</button>
 </div>
 
 <div id="portalList"></div>
 <div id="plot"></div>
 
 <script>
-  let portals = [], areas = [];
+  // GitHub repo info for JSON update
+  const rawDataURL = 'https://raw.githubusercontent.com/Firebee45/Aaaaaaa/main/minecraftMapData.json';
+  const apiRepoOwner = 'Firebee45';
+  const apiRepoName = 'Aaaaaaa';
+  const apiFilePath = 'minecraftMapData.json';
+  const apiBranch = 'main';
 
-  // Load saved data
+  let portals = [], areas = [];
+  let fileSHA = null; // will store SHA of the file for updates
+
+  // Load saved data from localStorage first
   const saved = localStorage.getItem('minecraftMapData');
   if (saved) {
     try {
@@ -90,6 +98,39 @@
       if (parsed.portals) portals = parsed.portals;
       if (parsed.areas) areas = parsed.areas;
     } catch {}
+  }
+
+  // Try to load from GitHub raw JSON on page load to get latest
+  fetch(rawDataURL)
+    .then(res => {
+      if (!res.ok) throw new Error('Not found on GitHub');
+      return res.json();
+    })
+    .then(json => {
+      portals = json.portals || [];
+      areas = json.areas || [];
+      saveData(); // sync to localStorage
+      updateList();
+      updatePlot();
+      getFileSHA();
+    })
+    .catch(() => {
+      // If failed to load from GitHub, just load from localStorage fallback
+      updateList();
+      updatePlot();
+      getFileSHA();
+    });
+
+  function getFileSHA() {
+    // Get the current file SHA needed for GitHub API update
+    fetch(`https://api.github.com/repos/${apiRepoOwner}/${apiRepoName}/contents/${apiFilePath}?ref=${apiBranch}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.sha) fileSHA = data.sha;
+      })
+      .catch(() => {
+        console.warn('Could not get file SHA from GitHub');
+      });
   }
 
   const coordForm = document.getElementById("coordForm");
@@ -218,26 +259,11 @@
       height: 600, width: 900, scale: 2
     });
   }
-  document.getElementById('exportJSONBtn').addEventListener('click', () => {
-    const dataStr = JSON.stringify({ portals, areas }, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'minecraftMapData.json';
-    a.click();
-    URL.revokeObjectURL(url);
-  });
 
   function calcDtick(range) {
     const base = 16;
     const exp = Math.floor(Math.log2(range / base));
     return base * Math.pow(2, Math.max(exp,0));
-  }
-
-  // Helper to check if two DOMRects overlap horizontally
-  function horizontalOverlap(r1, r2) {
-    return !(r2.left > r1.right || r2.right < r1.left);
   }
 
   function updatePlot() {
@@ -295,32 +321,20 @@
       dragmode: false,
       modebar: { remove: ['zoom2d', 'lasso2d', 'select2d', 'zoomIn2d', 'zoomOut2d'], orientation: 'v' }
     }, { responsive: true }).then(() => {
-      // After plot rendered, stack area labels visually if overlapping
       const svgTexts = document.querySelectorAll('#plot svg g.scatterlayer g.points text');
-
-      // Filter only area labels (red color)
       const areaLabels = Array.from(svgTexts).filter(t => {
         const style = window.getComputedStyle(t);
-        return style.fill === 'rgb(255, 0, 0)'; // red labels only
+        return style.fill === 'rgb(255, 0, 0)';
       });
-
-      // Sort labels by their x position for more predictable stacking
       areaLabels.sort((a, b) => a.getBBox().x - b.getBBox().x);
-
-      // We'll keep track of vertical offsets for stacking
       const verticalOffsets = new Array(areaLabels.length).fill(0);
-
-      // Check overlap pairwise, stack vertically if horizontally overlapping
       for (let i = 1; i < areaLabels.length; i++) {
         const r1 = areaLabels[i - 1].getBBox();
         const r2 = areaLabels[i].getBBox();
-        if (horizontalOverlap(r1, r2)) {
-          // Stack current label above previous label(s)
+        if (!(r2.left > r1.right || r2.right < r1.left)) {
           verticalOffsets[i] = verticalOffsets[i - 1] + r1.height + 4;
         }
       }
-
-      // Apply vertical offsets by modifying the 'y' attribute
       areaLabels.forEach((label, idx) => {
         if (verticalOffsets[idx] > 0) {
           const yOrig = parseFloat(label.getAttribute('y'));
@@ -330,9 +344,29 @@
     });
   }
 
-  updateList();
-  updatePlot();
-</script>
+  // Update JSON in your GitHub repo (needs a token)
+  async function updateJsonInRepo() {
+    if (!fileSHA) {
+      alert('File SHA not loaded yet, try again in a moment.');
+      return;
+    }
+    const token = prompt('Enter your GitHub Personal Access Token with repo permissions:');
+    if (!token) {
+      alert('Token is required to update the file.');
+      return;
+    }
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify({ portals, areas }, null, 2))));
+    const body = {
+      message: 'Update minecraftMapData.json via web editor',
+      content: content,
+      sha: fileSHA,
+      branch: apiBranch
+    };
 
-</body>
+    try {
+      const res = await fetch(`https://api.github.com/repos/${apiRepoOwner}/${apiRepoName}/contents/${apiFilePath}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `token ${token}`,
+          Accept: 'application/vnd.github.v3
 </html>
