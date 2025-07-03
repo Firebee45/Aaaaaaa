@@ -73,6 +73,7 @@
 <div class="button-group">
   <button onclick="clearAll()">Clear All</button>
   <button onclick="downloadPNG()">Download PNG</button>
+  <button id="exportJSONBtn">Export JSON</button>
 </div>
 
 <div id="portalList"></div>
@@ -217,6 +218,16 @@
       height: 600, width: 900, scale: 2
     });
   }
+  document.getElementById('exportJSONBtn').addEventListener('click', () => {
+    const dataStr = JSON.stringify({ portals, areas }, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'minecraftMapData.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
 
   function calcDtick(range) {
     const base = 16;
