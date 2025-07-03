@@ -73,6 +73,7 @@
 <div class="button-group">
   <button onclick="clearAll()">Clear All</button>
   <button onclick="downloadPNG()">Download PNG</button>
+  <button onclick="exportJSON()">Export JSON</button>
 </div>
 
 <div id="portalList"></div>
@@ -81,7 +82,6 @@
 <script>
   let portals = [], areas = [];
 
-  // Load data from localStorage or from data.json in repo
   async function loadInitialData() {
     const saved = localStorage.getItem('minecraftMapData');
     if (saved) {
@@ -246,15 +246,26 @@
     });
   }
 
+  // EXPORT JSON button function
+  function exportJSON() {
+    const dataStr = JSON.stringify({ portals, areas }, null, 2);
+    const blob = new Blob([dataStr], {type: "application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'minecraft_map_data.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 0);
+  }
+
   function calcDtick(range) {
     const base = 16;
     const exp = Math.floor(Math.log2(range / base));
     return base * Math.pow(2, Math.max(exp,0));
-  }
-
-  // Helper to check if two DOMRects overlap horizontally
-  function horizontalOverlap(r1, r2) {
-    return !(r2.left > r1.right || r2.right < r1.left);
   }
 
   function updatePlot() {
@@ -280,7 +291,6 @@
       });
     });
 
-    // Place area labels above boxes
     const areaLabelData = areas.filter(a => a.enabled).map(a => {
       const xMin = Math.min(a.x1, a.x2), xMax = Math.max(a.x1, a.x2);
       const zMax = Math.max(a.z1, a.z2);
@@ -314,7 +324,6 @@
     }, { responsive: true });
   }
 
-  // Load initial data and plot
   loadInitialData();
 </script>
 
