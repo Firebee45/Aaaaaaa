@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Minecraft Portal & Area Map Editor</title>
+  <title>Minecraft Portal & Area Map - Editor</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <style>
     body {
@@ -48,58 +48,11 @@
       width: 100%;
       height: 600px;
     }
-    /* Modal styles */
-    #modalOverlay {
-      display: none;
-      position: fixed;
-      top:0; left:0; right:0; bottom:0;
-      background: rgba(0,0,0,0.75);
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-    #modalContent {
-      background: #222;
-      border: 1px solid #555;
-      padding: 15px;
-      max-width: 600px;
-      max-height: 80vh;
-      overflow-y: auto;
-      color: #ddd;
-      font-family: monospace;
-      white-space: pre-wrap;
-      word-break: break-all;
-      position: relative;
-    }
-    #modalContent textarea {
-      width: 100%;
-      height: 300px;
-      background: #111;
-      color: #ddd;
-      border: 1px solid #555;
-      resize: vertical;
-      font-family: monospace;
-      font-size: 14px;
-      padding: 5px;
-    }
-    #modalCloseBtn {
-      position: absolute;
-      top: 5px;
-      right: 8px;
-      background: #700;
-      color: #ddd;
-      border: none;
-      padding: 4px 8px;
-      cursor: pointer;
-      font-weight: bold;
-      border-radius: 3px;
-      user-select: none;
-    }
   </style>
 </head>
 <body>
 
-<h2>Minecraft Portal & Area Map Editor</h2>
+<h2>Minecraft Portal & Area Map - Editor</h2>
 
 <form id="coordForm">
   <label>X:</label><input type="number" id="x" required />
@@ -120,93 +73,50 @@
 <div class="button-group">
   <button onclick="clearAll()">Clear All</button>
   <button onclick="downloadPNG()">Download PNG</button>
-  <button id="importJsonBtn">Import JSON</button>
-  <button id="exportJsonBtn">Export JSON</button>
-  <button id="updateJsonBtn">Update JSON in Repo</button>
 </div>
 
 <div id="portalList"></div>
 <div id="plot"></div>
 
-<!-- Modal for import/export JSON -->
-<div id="modalOverlay">
-  <div id="modalContent">
-    <button id="modalCloseBtn" title="Close">✖</button>
-    <div id="modalBody"></div>
-  </div>
-</div>
-
 <script>
-  // GitHub repo info for JSON update
-  const rawDataURL = 'https://raw.githubusercontent.com/Firebee45/Aaaaaaa/main/minecraftMapData.json';
-  const apiRepoOwner = 'Firebee45';
-  const apiRepoName = 'Aaaaaaa';
-  const apiFilePath = 'minecraftMapData.json';
-  const apiBranch = 'main';
-
   let portals = [], areas = [];
-  let fileSHA = null; // will store SHA of the file for updates
 
-  // Modal Elements
-  const modalOverlay = document.getElementById('modalOverlay');
-  const modalBody = document.getElementById('modalBody');
-  const modalCloseBtn = document.getElementById('modalCloseBtn');
-
-  modalCloseBtn.onclick = () => { hideModal(); };
-  modalOverlay.onclick = (e) => {
-    if (e.target === modalOverlay) hideModal();
-  };
-
-  function showModal(contentHtml) {
-    modalBody.innerHTML = contentHtml;
-    modalOverlay.style.display = 'flex';
+  // Load data from localStorage or from data.json in repo
+  async function loadInitialData() {
+    const saved = localStorage.getItem('minecraftMapData');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.portals) portals = parsed.portals;
+        if (parsed.areas) areas = parsed.areas;
+        updateList();
+        updatePlot();
+      } catch {
+        console.warn('Saved data corrupted, ignoring.');
+        fetchFromFile();
+      }
+    } else {
+      fetchFromFile();
+    }
   }
-  function hideModal() {
-    modalOverlay.style.display = 'none';
-    modalBody.innerHTML = '';
-  }
 
-  // Load saved data from localStorage first
-  const saved = localStorage.getItem('minecraftMapData');
-  if (saved) {
+  async function fetchFromFile() {
     try {
-      const parsed = JSON.parse(saved);
-      if (parsed.portals) portals = parsed.portals;
-      if (parsed.areas) areas = parsed.areas;
-    } catch {}
-  }
-
-  // Try to load from GitHub raw JSON on page load to get latest
-  fetch(rawDataURL)
-    .then(res => {
-      if (!res.ok) throw new Error('Not found on GitHub');
-      return res.json();
-    })
-    .then(json => {
-      portals = json.portals || [];
-      areas = json.areas || [];
-      saveData(); // sync to localStorage
+      const response = await fetch('data.json');
+      if (!response.ok) throw new Error('Failed to fetch data.json');
+      const data = await response.json();
+      portals = data.portals || [];
+      areas = data.areas || [];
+      saveData();
       updateList();
       updatePlot();
-      getFileSHA();
-    })
-    .catch(() => {
-      // If failed to load from GitHub, just load from localStorage fallback
+    } catch (e) {
+      console.error('Error loading data.json:', e);
+      portals = [];
+      areas = [];
       updateList();
       updatePlot();
-      getFileSHA();
-    });
-
-  function getFileSHA() {
-    // Get the current file SHA needed for GitHub API update
-    fetch(`https://api.github.com/repos/${apiRepoOwner}/${apiRepoName}/contents/${apiFilePath}?ref=${apiBranch}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.sha) fileSHA = data.sha;
-      })
-      .catch(() => {
-        console.warn('Could not get file SHA from GitHub');
-      });
+    }
   }
 
   const coordForm = document.getElementById("coordForm");
@@ -342,6 +252,11 @@
     return base * Math.pow(2, Math.max(exp,0));
   }
 
+  // Helper to check if two DOMRects overlap horizontally
+  function horizontalOverlap(r1, r2) {
+    return !(r2.left > r1.right || r2.right < r1.left);
+  }
+
   function updatePlot() {
     const data = [];
     const ps = portals.filter(p => p.enabled);
@@ -365,7 +280,7 @@
       });
     });
 
-    // Area labels
+    // Place area labels above boxes
     const areaLabelData = areas.filter(a => a.enabled).map(a => {
       const xMin = Math.min(a.x1, a.x2), xMax = Math.max(a.x1, a.x2);
       const zMax = Math.max(a.z1, a.z2);
@@ -380,14 +295,15 @@
         type: 'scatter',
       };
     });
+
     data.push(...areaLabelData);
 
-    const xs = [...ps.map(p => p.x), ...areas.map(a => a.x1).concat(areas.map(a => a.x2))];
-    const zs = [...ps.map(p => p.z), ...areas.map(a => a.z1).concat(areas.map(a => a.z2))];
+    const xs = [...ps.map(p => p.x), ...areas.flatMap(a => [a.x1, a.x2])];
+    const zs = [...ps.map(p => p.z), ...areas.flatMap(a => [a.z1, a.z2])];
     const minX = Math.min(...xs, 0) - 32, maxX = Math.max(...xs, 0) + 32;
     const minZ = Math.min(...zs, 0) - 32, maxZ = Math.max(...zs, 0) + 32;
-    const xrange = maxX - minX, zrange = maxZ - minZ;
-    const dt = calcDtick(Math.max(xrange, zrange));
+    const range = Math.max(maxX - minX, maxZ - minZ);
+    const dt = calcDtick(range);
 
     Plotly.newPlot('plot', data, {
       paper_bgcolor: '#111', plot_bgcolor: '#111', font: { color: '#ddd' },
@@ -397,3 +313,10 @@
       modebar: { remove: ['zoom2d', 'lasso2d', 'select2d', 'zoomIn2d', 'zoomOut2d'], orientation: 'v' }
     }, { responsive: true });
   }
+
+  // Load initial data and plot
+  loadInitialData();
+</script>
+
+</body>
+</html>
