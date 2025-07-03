@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -37,16 +38,6 @@
     .delete-btn {
       cursor: pointer;
       background: #700;
-      border: none;
-      color: #ddd;
-      padding: 2px 6px;
-      font-weight: bold;
-      border-radius: 3px;
-      user-select: none;
-    }
-    .edit-btn {
-      cursor: pointer;
-      background: #076;
       border: none;
       color: #ddd;
       padding: 2px 6px;
@@ -158,10 +149,6 @@
     updatePlot();
   });
 
-  // Keep track of editing state:
-  let editingPortalIndex = null;
-  let editingAreaIndex = null;
-
   function updateList() {
     const div = document.getElementById("portalList");
     div.innerHTML = '';
@@ -176,85 +163,24 @@
       checkbox.onchange = () => { toggleP(i); };
       wrapper.appendChild(checkbox);
 
-      if (editingPortalIndex === i) {
-        // Editing mode inputs
-        const labelInput = document.createElement('input');
-        labelInput.type = 'text';
-        labelInput.value = p.label;
-        labelInput.style.width = '120px';
-        wrapper.appendChild(labelInput);
+      const label = document.createElement('label');
+      label.textContent = `🟣 ${p.label} (${p.x},${p.z})`;
+      label.onclick = () => {
+        checkbox.checked = !checkbox.checked;
+        toggleP(i);
+      };
+      wrapper.appendChild(label);
 
-        const xInput = document.createElement('input');
-        xInput.type = 'number';
-        xInput.value = p.x;
-        wrapper.appendChild(xInput);
-
-        const zInput = document.createElement('input');
-        zInput.type = 'number';
-        zInput.value = p.z;
-        wrapper.appendChild(zInput);
-
-        const saveBtn = document.createElement('button');
-        saveBtn.className = 'edit-btn';
-        saveBtn.textContent = 'Save';
-        saveBtn.onclick = () => {
-          // Validate inputs
-          const newLabel = labelInput.value.trim() || p.label;
-          const newX = Number(xInput.value);
-          const newZ = Number(zInput.value);
-          if (isNaN(newX) || isNaN(newZ)) {
-            alert('Coordinates must be valid numbers.');
-            return;
-          }
-          portals[i] = {...portals[i], label: newLabel, x: newX, z: newZ};
-          editingPortalIndex = null;
-          saveData();
-          updateList();
-          updatePlot();
-        };
-        wrapper.appendChild(saveBtn);
-
-        const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'delete-btn';
-        cancelBtn.textContent = 'Cancel';
-        cancelBtn.onclick = () => {
-          editingPortalIndex = null;
-          updateList();
-        };
-        wrapper.appendChild(cancelBtn);
-
-      } else {
-        // Normal label display
-        const label = document.createElement('label');
-        label.textContent = `🟣 ${p.label} (${p.x},${p.z})`;
-        label.onclick = () => {
-          checkbox.checked = !checkbox.checked;
-          toggleP(i);
-        };
-        wrapper.appendChild(label);
-
-        const editBtn = document.createElement('button');
-        editBtn.className = 'edit-btn';
-        editBtn.textContent = 'Edit';
-        editBtn.onclick = () => {
-          editingPortalIndex = i;
-          editingAreaIndex = null;
-          updateList();
-        };
-        wrapper.appendChild(editBtn);
-
-        const delBtn = document.createElement('button');
-        delBtn.className = 'delete-btn';
-        delBtn.textContent = '✖';
-        delBtn.onclick = () => {
-          portals.splice(i,1);
-          if (editingPortalIndex === i) editingPortalIndex = null;
-          saveData();
-          updateList();
-          updatePlot();
-        };
-        wrapper.appendChild(delBtn);
-      }
+      const delBtn = document.createElement('button');
+      delBtn.className = 'delete-btn';
+      delBtn.textContent = '✖';
+      delBtn.onclick = () => {
+        portals.splice(i,1);
+        saveData();
+        updateList();
+        updatePlot();
+      };
+      wrapper.appendChild(delBtn);
 
       div.appendChild(wrapper);
     });
@@ -269,95 +195,24 @@
       checkbox.onchange = () => { toggleA(i); };
       wrapper.appendChild(checkbox);
 
-      if (editingAreaIndex === i) {
-        // Editing mode inputs for area
-        const labelInput = document.createElement('input');
-        labelInput.type = 'text';
-        labelInput.value = a.label;
-        labelInput.style.width = '120px';
-        wrapper.appendChild(labelInput);
+      const label = document.createElement('label');
+      label.textContent = `🟥 ${a.label} [(${a.x1},${a.z1})→(${a.x2},${a.z2})]`;
+      label.onclick = () => {
+        checkbox.checked = !checkbox.checked;
+        toggleA(i);
+      };
+      wrapper.appendChild(label);
 
-        const x1Input = document.createElement('input');
-        x1Input.type = 'number';
-        x1Input.value = a.x1;
-        wrapper.appendChild(x1Input);
-
-        const z1Input = document.createElement('input');
-        z1Input.type = 'number';
-        z1Input.value = a.z1;
-        wrapper.appendChild(z1Input);
-
-        const x2Input = document.createElement('input');
-        x2Input.type = 'number';
-        x2Input.value = a.x2;
-        wrapper.appendChild(x2Input);
-
-        const z2Input = document.createElement('input');
-        z2Input.type = 'number';
-        z2Input.value = a.z2;
-        wrapper.appendChild(z2Input);
-
-        const saveBtn = document.createElement('button');
-        saveBtn.className = 'edit-btn';
-        saveBtn.textContent = 'Save';
-        saveBtn.onclick = () => {
-          const newLabel = labelInput.value.trim() || a.label;
-          const newX1 = Number(x1Input.value);
-          const newZ1 = Number(z1Input.value);
-          const newX2 = Number(x2Input.value);
-          const newZ2 = Number(z2Input.value);
-          if ([newX1,newZ1,newX2,newZ2].some(v => isNaN(v))) {
-            alert('Coordinates must be valid numbers.');
-            return;
-          }
-          areas[i] = {...areas[i], label: newLabel, x1: newX1, z1: newZ1, x2: newX2, z2: newZ2};
-          editingAreaIndex = null;
-          saveData();
-          updateList();
-          updatePlot();
-        };
-        wrapper.appendChild(saveBtn);
-
-        const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'delete-btn';
-        cancelBtn.textContent = 'Cancel';
-        cancelBtn.onclick = () => {
-          editingAreaIndex = null;
-          updateList();
-        };
-        wrapper.appendChild(cancelBtn);
-
-      } else {
-        const label = document.createElement('label');
-        label.textContent = `🟥 ${a.label} [(${a.x1},${a.z1})→(${a.x2},${a.z2})]`;
-        label.onclick = () => {
-          checkbox.checked = !checkbox.checked;
-          toggleA(i);
-        };
-        wrapper.appendChild(label);
-
-        const editBtn = document.createElement('button');
-        editBtn.className = 'edit-btn';
-        editBtn.textContent = 'Edit';
-        editBtn.onclick = () => {
-          editingAreaIndex = i;
-          editingPortalIndex = null;
-          updateList();
-        };
-        wrapper.appendChild(editBtn);
-
-        const delBtn = document.createElement('button');
-        delBtn.className = 'delete-btn';
-        delBtn.textContent = '✖';
-        delBtn.onclick = () => {
-          areas.splice(i,1);
-          if (editingAreaIndex === i) editingAreaIndex = null;
-          saveData();
-          updateList();
-          updatePlot();
-        };
-        wrapper.appendChild(delBtn);
-      }
+      const delBtn = document.createElement('button');
+      delBtn.className = 'delete-btn';
+      delBtn.textContent = '✖';
+      delBtn.onclick = () => {
+        areas.splice(i,1);
+        saveData();
+        updateList();
+        updatePlot();
+      };
+      wrapper.appendChild(delBtn);
 
       div.appendChild(wrapper);
     });
