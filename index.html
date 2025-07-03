@@ -134,11 +134,6 @@
     updatePlot();
   }
 
-  function saveData() {
-    localStorage.setItem('minecraftPortals', JSON.stringify(portals));
-    localStorage.setItem('minecraftAreas', JSON.stringify(areas));
-  }
-
   function downloadPNG(){
     Plotly.downloadImage('plot', {
       format:'png', filename:'minecraft_map',
@@ -146,10 +141,21 @@
     });
   }
 
+  function saveData() {
+    localStorage.setItem('minecraftPortals', JSON.stringify(portals));
+    localStorage.setItem('minecraftAreas', JSON.stringify(areas));
+  }
+
   function calcDtick(range) {
     const base = 16;
     const exp = Math.floor(Math.log2(range / base));
     return base * Math.pow(2, Math.max(exp,0));
+  }
+
+  // Checks if two rectangles overlap (used for label stacking)
+  // rects are {xMin, xMax, yMin, yMax}
+  function rectsOverlap(r1, r2) {
+    return !(r1.xMax < r2.xMin || r1.xMin > r2.xMax || r1.yMax < r2.yMin || r1.yMin > r2.yMax);
   }
 
   function updatePlot(){
@@ -163,37 +169,92 @@
         marker:{size:10,color:'magenta'}, type:'scatter', name:'Portals'
       });
     }
-    areas.filter(a=>a.enabled).forEach(a=>{
-      const xMin=Math.min(a.x1,a.x2), xMax=Math.max(a.x1,a.x2);
-      const zMin=Math.min(a.z1,a.z2), zMax=Math.max(a.z1,a.z2);
-      data.push({ x:[xMin,xMax,xMax,xMin,xMin], y:[zMin,zMin,zMax,zMax,zMin],
-        mode:'lines', line:{color:'red',width:2}, showlegend:false, type:'scatter'
-      });
-      data.push({ x:[(xMin+xMax)/2], y:[zMax],
-        text:[a.label], mode:'text', textposition:'bottom center',
-        textfont:{color:'red',size:14}, showlegend:false, type:'scatter'
+
+    // Add rectangles for areas
+    areas.filter(a => a.enabled).forEach(a => {
+      const xMin = Math.min(a.x1, a.x2), xMax = Math.max(a.x1, a.x2);
+      const zMin = Math.min(a.z1, a.z2), zMax = Math.max(a.z1, a.z2);
+      data.push({
+        x: [xMin, xMax, xMax, xMin, xMin],
+        y: [zMin, zMin, zMax, zMax, zMin],
+        mode: 'lines',
+        line: { color: 'red', width: 2 },
+        showlegend: false,
+        type: 'scatter'
       });
     });
 
-    const xs = [...ps.map(p=>p.x), ...areas.map(a=>a.x1).concat(areas.map(a=>a.x2))];
-    const zs = [...ps.map(p=>p.z), ...areas.map(a=>a.z1).concat(areas.map(a=>a.z2))];
-    const minX = Math.min(...xs,0)-32, maxX = Math.max(...xs,0)+32;
-    const minZ = Math.min(...zs,0)-32, maxZ = Math.max(...zs,0)+32;
+    // Now place area labels with stacking to avoid overlap
+    // We'll track label bounding boxes and push up overlapping labels
+    const labelRects = []; // stores placed label rects {xMin,xMax,yMin,yMax}
+    const labelData = [];
+
+    areas.filter(a => a.enabled).forEach(a => {
+      const xMin = Math.min(a.x1, a.x2), xMax = Math.max(a.x1, a.x2);
+      const zMax = Math.max(a.z1, a.z2);
+
+      // Initial label position centered on X, 4 units above top edge
+      let labelX = (xMin + xMax) / 2;
+      let labelY = zMax + 4;
+
+      // Approximate label size in coordinate units
+      const labelWidth = (xMax - xMin) * 0.8; // try 80% width of area width for label width
+      const labelHeight = 6; // vertical size in coords
+
+      // Define bounding box of current label candidate
+      let currentRect = {
+        xMin: labelX - labelWidth / 2,
+        xMax: labelX + labelWidth / 2,
+        yMin: labelY - labelHeight,
+        yMax: labelY
+      };
+
+      // Check overlap and stack upward if needed
+      let stackStep = labelHeight + 2; // vertical spacing between stacked labels
+      let tries = 0;
+      while (labelRects.some(r => rectsOverlap(r, currentRect))) {
+        labelY += stackStep; // move label up
+        currentRect.yMin = labelY - labelHeight;
+        currentRect.yMax = labelY;
+        tries++;
+        if (tries > 20) break; // fail-safe infinite loop prevent
+      }
+
+      // Save this label rect to track future overlaps
+      labelRects.push({...currentRect});
+
+      // Add label trace
+      labelData.push({
+        x: [labelX],
+        y: [labelY],
+        text: [a.label],
+        mode: 'text',
+        textposition: 'top center',
+        textfont: { color: 'red', size: 14 },
+        showlegend: false,
+        type: 'scatter'
+      });
+    });
+
+    data.push(...labelData);
+
+    const xs = [...ps.map(p => p.x), ...areas.map(a => a.x1).concat(areas.map(a => a.x2))];
+    const zs = [...ps.map(p => p.z), ...areas.map(a => a.z1).concat(areas.map(a => a.z2))];
+    const minX = Math.min(...xs, 0) - 32, maxX = Math.max(...xs, 0) + 32;
+    const minZ = Math.min(...zs, 0) - 32, maxZ = Math.max(...zs, 0) + 32;
     const xrange = maxX - minX, zrange = maxZ - minZ;
-    const dt = calcDtick(Math.max(xrange,zrange));
+    const dt = calcDtick(Math.max(xrange, zrange));
 
     Plotly.newPlot('plot', data, {
-      paper_bgcolor:'#111', plot_bgcolor:'#111', font:{color:'#ddd'},
-      xaxis:{title:'X', showgrid:true, gridcolor:'#333', dtick:dt, range:[minX,maxX]},
-      yaxis:{title:'Z', showgrid:true, gridcolor:'#333', dtick:dt, scaleanchor:'x', scaleratio:1, range:[minZ,maxZ]},
-      dragmode:false,
-      modebar:{remove:['zoom2d','lasso2d','select2d','zoomIn2d','zoomOut2d'], orientation:'v'}
-    }, {responsive:true});
+      paper_bgcolor: '#111', plot_bgcolor: '#111', font: { color: '#ddd' },
+      xaxis: { title: 'X', showgrid: true, gridcolor: '#333', dtick: dt, range: [minX, maxX] },
+      yaxis: { title: 'Z', showgrid: true, gridcolor: '#333', dtick: dt, scaleanchor: 'x', scaleratio: 1, range: [minZ, maxZ] },
+      dragmode: false,
+      modebar: { remove: ['zoom2d', 'lasso2d', 'select2d', 'zoomIn2d', 'zoomOut2d'], orientation: 'v' }
+    }, { responsive: true });
   }
 
-  // Initial render
-  updateList();
-  updatePlot();
+  updateList(); updatePlot();
 </script>
 
 </body>
