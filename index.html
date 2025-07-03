@@ -48,6 +48,53 @@
       width: 100%;
       height: 600px;
     }
+    /* Modal styles */
+    #modalOverlay {
+      display: none;
+      position: fixed;
+      top:0; left:0; right:0; bottom:0;
+      background: rgba(0,0,0,0.75);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    #modalContent {
+      background: #222;
+      border: 1px solid #555;
+      padding: 15px;
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      color: #ddd;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+      position: relative;
+    }
+    #modalContent textarea {
+      width: 100%;
+      height: 300px;
+      background: #111;
+      color: #ddd;
+      border: 1px solid #555;
+      resize: vertical;
+      font-family: monospace;
+      font-size: 14px;
+      padding: 5px;
+    }
+    #modalCloseBtn {
+      position: absolute;
+      top: 5px;
+      right: 8px;
+      background: #700;
+      color: #ddd;
+      border: none;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-weight: bold;
+      border-radius: 3px;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
@@ -73,11 +120,21 @@
 <div class="button-group">
   <button onclick="clearAll()">Clear All</button>
   <button onclick="downloadPNG()">Download PNG</button>
+  <button id="importJsonBtn">Import JSON</button>
+  <button id="exportJsonBtn">Export JSON</button>
   <button id="updateJsonBtn">Update JSON in Repo</button>
 </div>
 
 <div id="portalList"></div>
 <div id="plot"></div>
+
+<!-- Modal for import/export JSON -->
+<div id="modalOverlay">
+  <div id="modalContent">
+    <button id="modalCloseBtn" title="Close">✖</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
 
 <script>
   // GitHub repo info for JSON update
@@ -89,6 +146,25 @@
 
   let portals = [], areas = [];
   let fileSHA = null; // will store SHA of the file for updates
+
+  // Modal Elements
+  const modalOverlay = document.getElementById('modalOverlay');
+  const modalBody = document.getElementById('modalBody');
+  const modalCloseBtn = document.getElementById('modalCloseBtn');
+
+  modalCloseBtn.onclick = () => { hideModal(); };
+  modalOverlay.onclick = (e) => {
+    if (e.target === modalOverlay) hideModal();
+  };
+
+  function showModal(contentHtml) {
+    modalBody.innerHTML = contentHtml;
+    modalOverlay.style.display = 'flex';
+  }
+  function hideModal() {
+    modalOverlay.style.display = 'none';
+    modalBody.innerHTML = '';
+  }
 
   // Load saved data from localStorage first
   const saved = localStorage.getItem('minecraftMapData');
@@ -289,7 +365,7 @@
       });
     });
 
-    // Place all area labels initially at a fixed height above their boxes
+    // Area labels
     const areaLabelData = areas.filter(a => a.enabled).map(a => {
       const xMin = Math.min(a.x1, a.x2), xMax = Math.max(a.x1, a.x2);
       const zMax = Math.max(a.z1, a.z2);
@@ -304,7 +380,6 @@
         type: 'scatter',
       };
     });
-
     data.push(...areaLabelData);
 
     const xs = [...ps.map(p => p.x), ...areas.map(a => a.x1).concat(areas.map(a => a.x2))];
@@ -320,53 +395,5 @@
       yaxis: { title: 'Z', showgrid: true, gridcolor: '#333', dtick: dt, scaleanchor: 'x', scaleratio: 1, range: [minZ, maxZ] },
       dragmode: false,
       modebar: { remove: ['zoom2d', 'lasso2d', 'select2d', 'zoomIn2d', 'zoomOut2d'], orientation: 'v' }
-    }, { responsive: true }).then(() => {
-      const svgTexts = document.querySelectorAll('#plot svg g.scatterlayer g.points text');
-      const areaLabels = Array.from(svgTexts).filter(t => {
-        const style = window.getComputedStyle(t);
-        return style.fill === 'rgb(255, 0, 0)';
-      });
-      areaLabels.sort((a, b) => a.getBBox().x - b.getBBox().x);
-      const verticalOffsets = new Array(areaLabels.length).fill(0);
-      for (let i = 1; i < areaLabels.length; i++) {
-        const r1 = areaLabels[i - 1].getBBox();
-        const r2 = areaLabels[i].getBBox();
-        if (!(r2.left > r1.right || r2.right < r1.left)) {
-          verticalOffsets[i] = verticalOffsets[i - 1] + r1.height + 4;
-        }
-      }
-      areaLabels.forEach((label, idx) => {
-        if (verticalOffsets[idx] > 0) {
-          const yOrig = parseFloat(label.getAttribute('y'));
-          label.setAttribute('y', yOrig - verticalOffsets[idx]);
-        }
-      });
-    });
+    }, { responsive: true });
   }
-
-  // Update JSON in your GitHub repo (needs a token)
-  async function updateJsonInRepo() {
-    if (!fileSHA) {
-      alert('File SHA not loaded yet, try again in a moment.');
-      return;
-    }
-    const token = prompt('Enter your GitHub Personal Access Token with repo permissions:');
-    if (!token) {
-      alert('Token is required to update the file.');
-      return;
-    }
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify({ portals, areas }, null, 2))));
-    const body = {
-      message: 'Update minecraftMapData.json via web editor',
-      content: content,
-      sha: fileSHA,
-      branch: apiBranch
-    };
-
-    try {
-      const res = await fetch(`https://api.github.com/repos/${apiRepoOwner}/${apiRepoName}/contents/${apiFilePath}`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `token ${token}`,
-          Accept: 'application/vnd.github.v3
-</html>
